@@ -23,7 +23,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run tests with coverage gate
+      - name: Run tests with coverage
+        id: tests
+        continue-on-error: true
         run: pytest --cov=app --cov-report=xml --cov-fail-under=80
 
       - name: SonarQube Cloud scan
@@ -36,3 +38,9 @@ jobs:
         timeout-minutes: 5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Fail if tests or coverage gate failed
+        if: steps.tests.outcome == 'failure'
+        run: |
+          echo "Tests or coverage gate failed"
+          exit 1
