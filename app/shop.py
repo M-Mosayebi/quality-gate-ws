@@ -10,7 +10,22 @@ def apply_discount(total, percent):
     return total * (1 - percent / 100)
 
 
-def untested_function(x):
-    if x > 10:
-        return x * 2
-    return x
+def shipping_cost(weight, distance, express):
+    if weight <= 0:
+        raise ValueError("invalid weight")
+    cost = weight * 2
+    if distance > 100:
+        cost += 20
+    if distance > 500:
+        cost += 50
+    if express:
+        cost = cost * 2
+    return cost
+
+
+def loyalty_points(total, member_level):
+    if member_level == "gold":
+        return int(total * 3)
+    if member_level == "silver":
+        return int(total * 2)
+    return int(total)
