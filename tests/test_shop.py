@@ -13,3 +13,9 @@ def test_apply_discount():
 def test_apply_discount_invalid_percent():
     with pytest.raises(ValueError):
         apply_discount(100, 150)
+
+
+def test_untested_function():
+    from app.shop import untested_function
+    assert untested_function(20) == 40
+    assert untested_function(5) == 5
