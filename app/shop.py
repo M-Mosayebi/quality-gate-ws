@@ -14,3 +14,17 @@ def untested_function(x):
     if x > 10:
         return x * 2
     return x
+
+
+def calculate_tax(price, country, is_business, has_exemption):
+    if country == "DE":
+        if is_business:
+            if has_exemption:
+                return 0
+            return price * 0.19
+        return price * 0.19
+    if country == "FR":
+        if is_business:
+            return price * 0.20
+        return price * 0.20
+    return price * 0.10
