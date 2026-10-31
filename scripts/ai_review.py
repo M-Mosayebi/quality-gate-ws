@@ -1,11 +1,15 @@
 import json
 import os
 import subprocess
+import sys
+import time
+import urllib.error
 import urllib.request
 
 API_URL = "https://models.github.ai/inference/chat/completions"
-MODEL = "openai/gpt-4.1"
-MAX_CHARS = 12000  # keep the prompt small
+MODELS = ["openai/gpt-4.1", "openai/gpt-4.1-mini", "openai/gpt-4o-mini"]
+MAX_CHARS = 12000
+ATTEMPTS_PER_MODEL = 2
 
 
 def read_file(path):
@@ -26,8 +30,8 @@ def get_diff():
     return result.stdout[:MAX_CHARS]
 
 
-def ask_model(diff, test_output):
-    prompt = (
+def build_prompt(diff, test_output):
+    return (
         "You are a senior code reviewer in a CI pipeline.\n"
         "A pull request FAILED the quality gate. Explain to a student, "
         "in simple Persian, why it failed and how to fix it.\n"
@@ -39,8 +43,11 @@ def ask_model(diff, test_output):
         f"=== TEST AND COVERAGE OUTPUT ===\n{test_output}\n\n"
         f"=== PR DIFF ===\n{diff}\n"
     )
+
+
+def call_model(model, prompt):
     body = json.dumps({
-        "model": MODEL,
+        "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 800,
     }).encode()
@@ -49,12 +56,39 @@ def ask_model(diff, test_output):
         data=body,
         headers={
             "Content-Type": "application/json",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
             "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
         },
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = json.load(resp)
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        status = resp.status
+        raw = resp.read().decode("utf-8", errors="replace")
+    print(f"[{model}] HTTP {status}, body length {len(raw)}")
+    if not raw.strip():
+        raise ValueError("empty response body")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        raise ValueError(f"not JSON, first 300 chars: {raw[:300]}")
     return data["choices"][0]["message"]["content"]
+
+
+def ask_model(prompt):
+    for model in MODELS:
+        for attempt in range(1, ATTEMPTS_PER_MODEL + 1):
+            try:
+                print(f"Trying {model} (attempt {attempt})")
+                return call_model(model, prompt)
+            except urllib.error.HTTPError as e:
+                detail = e.read().decode("utf-8", errors="replace")[:300]
+                print(f"[{model}] HTTP error {e.code}: {detail}")
+                if e.code in (401, 403, 404):
+                    break  # retrying will not help for this model
+            except Exception as e:
+                print(f"[{model}] failed: {type(e).__name__}: {e}")
+            time.sleep(3)
+    return None
 
 
 def post_comment(text):
@@ -77,9 +111,11 @@ def post_comment(text):
 def main():
     diff = get_diff()
     test_output = read_file("test_output.txt")
-    review = ask_model(diff, test_output)
-    comment = "## 🤖 AI Review\n\n" + review
-    post_comment(comment)
+    review = ask_model(build_prompt(diff, test_output))
+    if review is None:
+        print("AI model did not answer. See messages above.")
+        sys.exit(1)
+    post_comment("## 🤖 AI Review\n\n" + review)
     print("Comment posted.")
 
 
