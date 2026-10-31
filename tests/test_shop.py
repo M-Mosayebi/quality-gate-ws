@@ -51,3 +51,11 @@ def test_loyalty_points_silver():
 
 def test_loyalty_points_default():
     assert loyalty_points(100, "bronze") == 100
+
+
+def test_calculate_tax():
+    from app.shop import calculate_tax
+    assert calculate_tax(100, "DE", True, True) == 0
+    assert calculate_tax(100, "DE", False, False) == 19.0
+    assert calculate_tax(100, "FR", True, False) == 20.0
+    assert calculate_tax(100, "US", False, False) == 10.0
