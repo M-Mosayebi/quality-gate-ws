@@ -1,0 +1,18 @@
+name: Test Gemini
+
+on:
+  push:
+    branches: [test-gemini]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List Gemini models
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          curl -s -w "\nHTTP_STATUS=%{http_code}\n" \
+            "https://generativelanguage.googleapis.com/v1beta/models" \
+            -H "x-goog-api-key: $GEMINI_API_KEY" \
+            | grep -E '"name"|"message"|"status"|HTTP_STATUS' | head -30
