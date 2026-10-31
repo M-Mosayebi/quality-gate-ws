@@ -6,8 +6,8 @@ import time
 import urllib.error
 import urllib.request
 
-API_URL = "https://models.github.ai/inference/chat/completions"
-MODELS = ["openai/gpt-4.1", "openai/gpt-4.1-mini", "openai/gpt-4o-mini"]
+MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest"]
+API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 MAX_CHARS = 12000
 ATTEMPTS_PER_MODEL = 2
 
@@ -46,32 +46,35 @@ def build_prompt(diff, test_output):
 
 
 def call_model(model, prompt):
+    url = f"{API_BASE}/{model}:generateContent"
     body = json.dumps({
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 800,
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"maxOutputTokens": 2048},
     }).encode()
     req = urllib.request.Request(
-        API_URL,
+        url,
         data=body,
         headers={
             "Content-Type": "application/json",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+            "x-goog-api-key": os.environ["GEMINI_API_KEY"],
         },
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=60) as resp:
         status = resp.status
         raw = resp.read().decode("utf-8", errors="replace")
     print(f"[{model}] HTTP {status}, body length {len(raw)}")
-    if not raw.strip():
-        raise ValueError("empty response body")
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
         raise ValueError(f"not JSON, first 300 chars: {raw[:300]}")
-    return data["choices"][0]["message"]["content"]
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise ValueError(f"no candidates in answer: {raw[:300]}")
+    parts = candidates[0].get("content", {}).get("parts", [])
+    text = "".join(p.get("text", "") for p in parts).strip()
+    if not text:
+        raise ValueError(f"empty text, finishReason={candidates[0].get('finishReason')}")
+    return text
 
 
 def ask_model(prompt):
@@ -83,8 +86,10 @@ def ask_model(prompt):
             except urllib.error.HTTPError as e:
                 detail = e.read().decode("utf-8", errors="replace")[:300]
                 print(f"[{model}] HTTP error {e.code}: {detail}")
-                if e.code in (401, 403, 404):
+                if e.code in (400, 401, 403, 404):
                     break  # retrying will not help for this model
+                if e.code == 429:
+                    time.sleep(10)
             except Exception as e:
                 print(f"[{model}] failed: {type(e).__name__}: {e}")
             time.sleep(3)

@@ -7,7 +7,6 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  models: read
 
 jobs:
   ai-review:
@@ -34,10 +33,11 @@ jobs:
           pytest --cov=app --cov-fail-under=80 2>&1 | tee test_output.txt
 
       - name: AI review comment (only if gate failed)
-        timeout-minutes: 3
         if: steps.tests.outcome == 'failure'
+        timeout-minutes: 3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
